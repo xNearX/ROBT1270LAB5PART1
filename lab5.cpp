@@ -21,9 +21,12 @@ Date Created: ?????
 #include <math.h>   // math functions
 #include <string.h> // string functions
 #include <ctype.h>  // character functions
-#include "robot.h"  // robot functions
 
+//-------------------------- WINDOWS SPECIFIC CODE ---------------------------------------------------------------
+#ifdef  _WIN32
+#include "robot.h"  // robot functions
 CRobot robot; // the global robot Class.  Can be used everywhere
+#endif
 
 //---------------------------- Program Constants -----------------------------------------------------------------
 const double PI = 3.14159265358979323846;    // the one and only
@@ -34,7 +37,11 @@ const double ABS_THETA2_DEG_MAX = 170.0;     // maximum magnitude of elbow angle
 const double LMAX = L1 + L2;                 // max L -> maximum reach of robot
 const double LMIN = sqrt(L1 * L1 + L2 * L2 - 2.0 * L1 * L2 * cos(PI - ABS_THETA2_DEG_MAX * PI / 180.0)); // min L
 
+#ifdef _WIN32
 const double ERROR_VALUE = DBL_MAX;
+#elif __APPLE__
+const double ERROR_VALUE = -1;
+#endif
 
 const int LOW_RESOLUTION_POINTS_PER_500_UNITS = 3;
 const int MEDIUM_RESOLUTION_POINTS_PER_500_UNITS = 11;
@@ -43,7 +50,7 @@ const int HIGH_RESOLUTION_POINTS_PER_500_UNITS = 21;
 
 #define COMMAND_STRING_ARRAY_SIZE 502        // size of array to store commands for robot. NOTE: 2 elements must be
                                              // reserved for trailing '\n' and '\0' in command string
-#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS              // disables _s warnings for windows users
 
 enum { LEFT, RIGHT };      // left arm or right arm configuration
 enum { PEN_UP, PEN_DOWN }; // pen position
@@ -92,6 +99,7 @@ typedef struct PEN_STATE
 }
 PEN_STATE;
 
+#ifdef _WIN32
 // robot state data
 typedef struct ROBOT_STATE
 {
@@ -101,6 +109,7 @@ typedef struct ROBOT_STATE
    int motorSpeed;
 }
 ROBOT_STATE;
+#endif
 
 typedef struct INVERSE_SOLUTION
 {
@@ -125,12 +134,19 @@ double radToDeg(double);         // returns angle in degrees from input angle in
 double mapAngle(double angRad);  // make sure inverseKinematic angled are mapped in range robot understands
 void pauseRobotThenClear();      // pauses the robot for screen capture, then clears everything
 
+//----------------------------- Windows Only Functions -----------------------------------------------------------
+#ifdef _WIN32
 void robotState(ROBOT_STATE *pState, bool bSetState);  // stores/retrieves the current state of the robot
+void drawLine();
+#endif
 
 INVERSE_SOLUTION inverseKinematics(TOOL_POSITION); // get left/right arm joint angles from x,y pos
 TOOL_POSITION* getLinePoints(double, double, double, double, char, int*);
 PATH_CHECK checkPath(TOOL_POSITION*, int);
-void drawLine();
+
+#ifdef __APPLE__
+void macDrawLine();
+#endif
 
 
 //----------------------------------------------------------------------------------------------------------------
@@ -139,21 +155,26 @@ void drawLine();
 // RETURN VALUE: an int that tells the O/S how the program ended.  0 = EXIT_SUCCESS = normal termination
 int main()
 {
+   // windows only
+   #ifdef _WIN32
    // open connection with robot
    if(!robot.Initialize()) return 0;
-
    drawLine();
-
-
-
    robot.Send("END\n"); // close remote connection
    robot.Close(); // close the robot
+
+   // Mac Only
+   #elif __APPLE__
+   macDrawLine();
+   #endif
+
 
    printf("\n\nPress ENTER to end the program...\n");
    waitForEnterKey();
    return EXIT_SUCCESS;
 }
 
+#ifdef _WIN32
 //----------------------------------------------------------------------------------------------------------------
 // DESCRIPTION:  Find x,y position corresponding to shoulder and elbow angles
 // ARGUMENTS:    theta1Deg, theta2Deg:  shoulder/joint angles.  px, py: pointers to pen position x,y
@@ -167,6 +188,7 @@ void robotState(ROBOT_STATE *pState, bool bSetState)
    else
       *pState = state;
 }
+#endif
 
 //----------------------------------------------------------------------------------------------------------------
 // DESCRIPTION:  Find shoulder and elbow angles for both left/right arm configurations for a x,y coordinate 
@@ -199,7 +221,6 @@ INVERSE_SOLUTION inverseKinematics(TOOL_POSITION toolPos)
       if (fabs(leftTheta1) > ABS_THETA1_DEG_MAX || fabs(leftTheta2) > ABS_THETA2_DEG_MAX)
       {
          isol.bCanReach[LEFT] = false;
-         printf("NOPE");
       }
       else
       {
@@ -214,7 +235,6 @@ INVERSE_SOLUTION inverseKinematics(TOOL_POSITION toolPos)
       if (fabs(rightTheta1) > ABS_THETA1_DEG_MAX || fabs(rightTheta2) > ABS_THETA2_DEG_MAX)
       {
          isol.bCanReach[RIGHT] = false;
-         printf("NOPE");
       }
       else
       {
@@ -296,6 +316,7 @@ PATH_CHECK checkPath(TOOL_POSITION* points, int NP)
 
 }
 
+#ifdef _WIN32
 void drawLine()
 {
    double x1, y1, x2, y2;
@@ -366,13 +387,50 @@ void drawLine()
       free(points);
    }
 }
+#endif
 
 
+void macDrawLine()
+{
+   TOOL_POSITION toolPos = {-400, -300};
+   INVERSE_SOLUTION isol = inverseKinematics(toolPos);
+   double x1 = -400, y1 = 300, x2 = 400, y2 = 300;
+   char resolution = 'h';
+   int numPoints;
+   TOOL_POSITION* points;
+   PATH_CHECK pathCheck;
 
+   printf("left theta 1 is: %lf\n", isol.jointAngles[LEFT].theta1Deg);
+   printf("left theta 2 is: %lf\n", isol.jointAngles[LEFT].theta2Deg);
+   printf("right theta 1 is: %lf\n", isol.jointAngles[RIGHT].theta1Deg);
+   printf("right theta 2 is: %lf\n", isol.jointAngles[RIGHT].theta2Deg);
+   printf("Left can reach is %d\n", isol.bCanReach[LEFT]);
+   printf("Right can reach is %d\n", isol.bCanReach[RIGHT]);
 
+   points = getLinePoints(x1, y1, x2, y2, resolution, &numPoints);
+   
+   printf("The number of points at high resolution is %d\n", numPoints);
 
+   for(size_t i = 0; i < numPoints; i++)
+   {
+      printf("(%lf, %lf)\n", points[i].x, points[i].y);
+   }
+
+   pathCheck = checkPath(points, numPoints);
+
+   if (pathCheck.bCanDraw[RIGHT] && (!pathCheck.bCanDraw[LEFT] || pathCheck.dThetaDeg[RIGHT] < pathCheck.dThetaDeg[LEFT]))
+   {
+      for(size_t i = 0; i < numPoints; i++)
+      {
+         printf("(%lf, %lf)\n", points[i].x, points[i].y);
+      }
+   }
+
+}
+
+#ifdef _WIN32
 //----------------------------------------------------------------------------------------------------------------
-// DESCRIPTION:  Pauses the robot then clears everthing after user presses ENTER
+// DESCRIPTION:  Pauses the robot then clears everything after user presses ENTER
 // ARGUMENTS:    none
 // RETURN VALUE: none
 void pauseRobotThenClear()
@@ -385,6 +443,7 @@ void pauseRobotThenClear()
    robot.Send("CLEAR_REMOTE_COMMAND_LOG\n");
    robot.Send("CLEAR_POSITION_LOG\n");
 }
+#endif
 
 //----------------------------------------------------------------------------------------------------------------
 // DESCRIPTION:  Maps an angle in radians into a an equivalent angle understood by the robot (-PI <= ang <= +PI)
