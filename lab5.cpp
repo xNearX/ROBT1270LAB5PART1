@@ -333,7 +333,7 @@ void drawLine()
    scanf_s("%lf %lf", &x2, &y2);
    flushInputBuffer();
 
-   printf("Please enter line resolution (l = low, m = medium, h - high: ");
+   printf("Please enter line resolution (l = low, m = medium, h = high): ");
    scanf_s("%c", &resolution, sizeof(&resolution));
    flushInputBuffer();
 
@@ -392,10 +392,10 @@ void drawLine()
 
 void macDrawLine()
 {
-   TOOL_POSITION toolPos = {-400, -300};
+   TOOL_POSITION toolPos = {-230.303030, 300};
    INVERSE_SOLUTION isol = inverseKinematics(toolPos);
    double x1 = -400, y1 = 300, x2 = 400, y2 = 300;
-   char resolution = 'h';
+   char resolution = 'l';
    int numPoints;
    TOOL_POSITION* points;
    PATH_CHECK pathCheck;
