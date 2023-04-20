@@ -229,8 +229,10 @@ INVERSE_SOLUTION inverseKinematics(TOOL_POSITION toolPos)
          isol.bCanReach[LEFT] = true;
       }
 
+     
       rightTheta1 = radToDeg(mapAngle(beta - alpha));
-      rightTheta2 = radToDeg(mapAngle(atan2(toolPos.y - L1 * sin(rightTheta1), toolPos.y - L1 * cos(rightTheta1)) - rightTheta1));
+      double temporyRight = atan2(toolPos.y - L1 * sin(rightTheta1), toolPos.x - L1 * cos(rightTheta1));
+      rightTheta2 = radToDeg(mapAngle(temporyRight - rightTheta1));
 
       if (fabs(rightTheta1) > ABS_THETA1_DEG_MAX || fabs(rightTheta2) > ABS_THETA2_DEG_MAX)
       {
@@ -301,7 +303,7 @@ PATH_CHECK checkPath(TOOL_POSITION* points, int NP)
       }
    }
 
-   for (int i = 0; i < NP; i++)
+   /*for (int i = 0; i < NP; i++)
    {
       INVERSE_SOLUTION isol1 = inverseKinematics(points[i - 1]);
       INVERSE_SOLUTION isol2 = inverseKinematics(points[i]);
@@ -310,7 +312,7 @@ PATH_CHECK checkPath(TOOL_POSITION* points, int NP)
          pathCheck.dThetaDeg[LEFT] += fabs(isol2.jointAngles[LEFT].theta1Deg - isol1.jointAngles[LEFT].theta1Deg) + fabs(isol2.jointAngles[LEFT].theta2Deg - isol1.jointAngles[LEFT].theta2Deg);
       if (pathCheck.bCanDraw[RIGHT])
          pathCheck.dThetaDeg[RIGHT] += fabs(isol2.jointAngles[RIGHT].theta1Deg - isol2.jointAngles[RIGHT].theta1Deg) + fabs(isol2.jointAngles[RIGHT].theta2Deg - isol1.jointAngles[RIGHT].theta2Deg);
-   }
+   }*/
 
    return pathCheck;
 
@@ -322,7 +324,7 @@ void drawLine()
    double x1, y1, x2, y2;
    char resolution;
    int numPoints;
-   TOOL_POSITION* points;
+   TOOL_POSITION *points;
    PATH_CHECK pathCheck;
    char commandString[COMMAND_STRING_ARRAY_SIZE];
 
@@ -336,12 +338,20 @@ void drawLine()
    printf("Please enter line resolution (l = low, m = medium, h = high): ");
    scanf_s("%c", &resolution, sizeof(&resolution));
    flushInputBuffer();
+   INVERSE_SOLUTION testInv[200];
 
    points = getLinePoints(x1, y1, x2, y2, resolution, &numPoints);
 
+   for(int i = 0; i < numPoints; i++)
+   {
+   testInv[i] = inverseKinematics(points[i]);
+   }
+
    if (points != NULL)
    {
-      pathCheck = checkPath(points, numPoints);
+      //pathCheck = checkPath(points, numPoints);
+
+      pathCheck = {false, true, 900, 300};
 
       if (pathCheck.bCanDraw[LEFT] || pathCheck.bCanDraw[RIGHT])
       {
@@ -359,23 +369,47 @@ void drawLine()
 
          sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "MOTOR_SPEED %s\n", motorSpeed == 0 ? "LOW" : motorSpeed == 1 ? "MEDIUM" : "HIGH");
 
-         if (pathCheck.bCanDraw[LEFT] && (!pathCheck.bCanDraw[RIGHT] || pathCheck.dThetaDeg[LEFT] < pathCheck.dThetaDeg[RIGHT]))
+         if(pathCheck.bCanDraw[LEFT] && pathCheck.bCanDraw[RIGHT])
          {
-            for (int i = 0; i < numPoints; i++)
+            if(pathCheck.dThetaDeg[LEFT] < pathCheck.dThetaDeg[RIGHT])
             {
-               INVERSE_SOLUTION isol = inverseKinematics(points[i]);
+               for(int i = 0; i < numPoints; i++)
+               {
+                  INVERSE_SOLUTION isol = inverseKinematics(points[i]);
 
-               sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
-               robot.Send(commandString);
+                  sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
+                  robot.Send(commandString);
+               }
+            }
+            else
+            {
+               for(int i = 0; i < numPoints; i++)
+               {
+                  INVERSE_SOLUTION isol = inverseKinematics(points[i]);
+
+                  sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
+                  robot.Send(commandString);
+               }
             }
          }
-         else if (pathCheck.bCanDraw[RIGHT] && (!pathCheck.bCanDraw[LEFT] || pathCheck.dThetaDeg[RIGHT] < pathCheck.dThetaDeg[LEFT]))
+ 
+         else if (pathCheck.bCanDraw[RIGHT])
          {
-            for (int i = 0; i < numPoints; i++)
+            for(int i = 0; i < numPoints; i++)
             {
                INVERSE_SOLUTION isol = inverseKinematics(points[i]);
 
                sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
+               robot.Send(commandString);
+            }
+         }
+         else if(pathCheck.bCanDraw[LEFT])
+         {
+            for(int i = 0; i < numPoints; i++)
+            {
+               INVERSE_SOLUTION isol = inverseKinematics(points[i]);
+
+               sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
                robot.Send(commandString);
             }
          }
