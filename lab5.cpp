@@ -467,6 +467,47 @@ void macDrawLine()
          printf("(%lf, %lf)\n", points[i].x, points[i].y);
       }
    }
+   TOOL_POSITION tp = { -400, 300 };
+   int numPoints = 0;
+
+
+   printf("The start point is (%+d, %+d)\n", -500, -300);
+   printf("The end point is is (%+d, %+d)\n", -500, -100);
+
+   TOOL_POSITION* storeme = getLinePoints(-500, -300, -500, -100, 'm', &numPoints);
+
+
+   for (int i = 0; i < numPoints; ++i)
+   {
+       INVERSE_SOLUTION isol = inverseKinematics(storeme[i]);
+       printf("---------------------------------------------------------\n");
+       printf("left joint angles: (%lf, %lf)\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
+       printf("left arm reachable: %d\n\n", isol.bCanReach[LEFT]);
+
+       printf("****************************\n");
+       printf("Right Arm:\n");
+       printf("right joint angles: (%lf, %lf)\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
+       printf("right arm reachable: %d\n", isol.bCanReach[RIGHT]);
+
+
+
+   }
+
+
+   /*
+   INVERSE_SOLUTION isol = inverseKinematics(tp);
+
+   printf("the value of x: %lf\n the value of y: %lf\n", tp.x, tp.y);
+   printf("the left joint angles: (%lf, %lf)\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
+   printf("The right joint angles: (%lf, %lf)\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
+   printf("this is left %d\n", isol.bCanReach[LEFT]);
+   printf("This is right %d", isol.bCanReach[RIGHT]);
+   */
+
+
+
+
+
 }
 
 #ifdef _WIN32
