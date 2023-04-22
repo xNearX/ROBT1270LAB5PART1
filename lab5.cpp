@@ -198,129 +198,114 @@ void robotState(ROBOT_STATE *pState, bool bSetState)
 //               value for each arm indicating if the coordinate is reachable.
 INVERSE_SOLUTION inverseKinematics(TOOL_POSITION toolPos)
 {
-   INVERSE_SOLUTION isol = {ERROR_VALUE, ERROR_VALUE, ERROR_VALUE, ERROR_VALUE, false, false};  // solution values
+    INVERSE_SOLUTION isol = { ERROR_VALUE, ERROR_VALUE, ERROR_VALUE, ERROR_VALUE, false, false };
 
-   double distance = 0.0;    // L distance of arm from origin to location
-   double beta = 0.0;        // angle measurement to L
-   double alpha = 0.0;       // angle measurement for left or right arm position
-   double leftTheta1 = 0.0;
-   double leftTheta2 = 0.0;
-   double rightTheta1 = 0.0;
-   double rightTheta2 = 0.0;
+    double distance = 0.0;
+    double beta = 0.0;
+    double alpha = 0.0;
+    double tanExpression = 0.0;
 
+    double leftTheta1 = 0.0;
+    double leftTheta2 = 0.0;
+    double leftTheta1Deg = 0.0;
+    double leftTheta2Deg = 0.0;
 
-   distance = sqrt(toolPos.x * toolPos.x + toolPos.y * toolPos.y);
+    double rightTheta1 = 0.0;
+    double rightTheta2 = 0.0;
+    double rightTheta1Deg = 0.0;
+    double rightTheta2Deg = 0.0;
 
-   if (distance >= LMIN && distance <= LMAX)
-   {
-      beta = atan2(toolPos.y, toolPos.x);
-      alpha = acos((L2 * L2 - distance * distance - L1 * L1) / (-2 * distance * L1));
+    distance = sqrt(toolPos.x * toolPos.x + toolPos.y * toolPos.y);
 
-      leftTheta1 = radToDeg(mapAngle(beta + alpha));
-      leftTheta2 = radToDeg(mapAngle(atan2(toolPos.y - L1 * sin(leftTheta1), toolPos.x - L1 * cos(leftTheta1)) - leftTheta1));
+    // test that distance from robot origin to entered point is within range
+    if (distance > LMIN && distance < LMAX)
+    {
+        beta = atan2(toolPos.y, toolPos.x);
+        alpha = acos((L2 * L2 - distance * distance - L1 * L1) / (-2 * distance * L1));
 
-      if (fabs(leftTheta1) > ABS_THETA1_DEG_MAX || fabs(leftTheta2) > ABS_THETA2_DEG_MAX)
-      {
-         isol.bCanReach[LEFT] = false;
-      }
-      else
-      {
-         isol.jointAngles[LEFT].theta1Deg = leftTheta1;
-         isol.jointAngles[LEFT].theta2Deg = leftTheta2;
-         isol.bCanReach[LEFT] = true;
-      }
-
-     
-      rightTheta1 = beta - alpha;
-      double temporyRight = atan2(toolPos.y - L1 * sin(rightTheta1), toolPos.x - L1 * cos(rightTheta1));
-      rightTheta2 = radToDeg(mapAngle(temporyRight - rightTheta1));
-      rightTheta1 = radToDeg(mapAngle(rightTheta1));
+        leftTheta1 = mapAngle(beta + alpha);
+        tanExpression = atan2(toolPos.y - L1 * sin(leftTheta1), toolPos.x - L1 * cos(leftTheta1));
+        leftTheta2 = mapAngle(tanExpression - leftTheta1);
 
 
-      if (fabs(rightTheta1) > ABS_THETA1_DEG_MAX || fabs(rightTheta2) > ABS_THETA2_DEG_MAX)
-      {
-         isol.bCanReach[RIGHT] = false;
-      }
-      else
-      {
-         isol.jointAngles[RIGHT].theta1Deg = rightTheta1;
-         isol.jointAngles[RIGHT].theta2Deg = rightTheta2;
-         isol.bCanReach[RIGHT] = true;
+        leftTheta1Deg = radToDeg(leftTheta1);
+        leftTheta2Deg = radToDeg(leftTheta2);
 
-      }
-   }
-   return isol;
+        if (fabs(leftTheta1Deg) < ABS_THETA1_DEG_MAX && fabs(leftTheta2Deg) < ABS_THETA2_DEG_MAX)
+        {
+            isol.jointAngles[LEFT].theta1Deg = leftTheta1Deg;
+            isol.jointAngles[LEFT].theta2Deg = leftTheta2Deg;
+            isol.bCanReach[LEFT] = true;
+
+        }
+
+        rightTheta1 = mapAngle(beta - alpha);
+        tanExpression = atan2(toolPos.y - L1 * sin(rightTheta1), toolPos.x - L1 * cos(rightTheta1));
+        rightTheta2 = mapAngle(tanExpression - rightTheta1);
+
+        rightTheta1Deg = radToDeg(rightTheta1);
+        rightTheta2Deg = radToDeg(rightTheta2);
+
+        if (fabs(rightTheta1Deg) < ABS_THETA1_DEG_MAX && fabs(rightTheta2Deg) < ABS_THETA2_DEG_MAX)
+        {
+            isol.jointAngles[RIGHT].theta1Deg = rightTheta1Deg;
+            isol.jointAngles[RIGHT].theta2Deg = rightTheta2Deg;
+            isol.bCanReach[RIGHT] = true;
+
+        }
+    }
+    return isol;
+
 }
 
 TOOL_POSITION* getLinePoints(double x1, double y1, double x2, double y2, char resolution, int* numPoints)
 {
-   double lineLength = sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
-   int NP;
 
-   if (resolution == 'l')
-   {
-      NP = nint(((lineLength) / 500) * LOW_RESOLUTION_POINTS_PER_500_UNITS);
-   }
-   else if (resolution == 'm')
-   {
-      NP = nint(((lineLength) / 500) * MEDIUM_RESOLUTION_POINTS_PER_500_UNITS);
-   }
-   else
-   {
-      NP = nint(((lineLength) / 500) * HIGH_RESOLUTION_POINTS_PER_500_UNITS);
-   }
+    double lineLength = sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
 
-   TOOL_POSITION* points = (TOOL_POSITION*)malloc(NP * sizeof(TOOL_POSITION)+1);
+    int NP = 0;
 
-   if (points == NULL)
-   {
-      return NULL;
-   }
+    if (resolution == 'l')
+    {
+        NP = nint(((lineLength) / 500) * LOW_RESOLUTION_POINTS_PER_500_UNITS);
+    }
+    else if (resolution == 'm')
+    {
+        NP = nint(((lineLength) / 500) * MEDIUM_RESOLUTION_POINTS_PER_500_UNITS);
+    }
+    else if (resolution == 'h')
+    {
+        NP = nint(((lineLength) / 500) * HIGH_RESOLUTION_POINTS_PER_500_UNITS);
+    }
 
-   for (int n = 0; n < NP; n++)
-   {
-      points[n].x = x1 + (x2 - x1) * n / (NP - 1);
-      points[n].y = y1 + (y2 - y1) * n / (NP - 1);
-   }
+    printf("The number of of points is %d\n", NP);
 
-   *numPoints = NP;
+    TOOL_POSITION* toolPoints = (TOOL_POSITION*)malloc(NP * sizeof(TOOL_POSITION));
 
-   return points;
+    if (toolPoints != NULL)
+    {
+        for (int n = 0; n < NP; ++n)
+        {
+            toolPoints[n].x = x1 + (x2 - x1) * ((double)n) / ((double)NP - 1);
+            toolPoints[n].y = y1 + (y2 - y1) * ((double)n) / ((double)NP - 1);
+        }
+    }
+    else
+    {
+        return NULL;
+    }
+
+
+    printf("The list of points are:\n");
+    for (int i = 0; i < NP; ++i)
+    {
+        printf("(%lf, %lf) \n", toolPoints[i].x, toolPoints[i].y);
+    }
+
+    *numPoints = NP;
+
+    return toolPoints;
 }
-
-PATH_CHECK checkPath(TOOL_POSITION* points, int NP)
-{
-   PATH_CHECK pathCheck = { true, true, 0.0, 0.0 };
-   for (int i = 0; i < NP; i++)
-   {
-      INVERSE_SOLUTION isol = inverseKinematics(points[i]);
-
-      if (!isol.bCanReach[LEFT])
-      {
-         pathCheck.bCanDraw[LEFT] = false;
-      }
-
-      if (!isol.bCanReach[RIGHT])
-      {
-         pathCheck.bCanDraw[RIGHT] = false;
-      }
-   }
-
-   for (int i = 0; i < NP; i++)
-   {
-      INVERSE_SOLUTION isol1 = inverseKinematics(points[i - 1]);
-      INVERSE_SOLUTION isol2 = inverseKinematics(points[i]);
-
-      if (pathCheck.bCanDraw[LEFT])
-         pathCheck.dThetaDeg[LEFT] += fabs(isol2.jointAngles[LEFT].theta1Deg - isol1.jointAngles[LEFT].theta1Deg) + fabs(isol2.jointAngles[LEFT].theta2Deg - isol1.jointAngles[LEFT].theta2Deg);
-      if (pathCheck.bCanDraw[RIGHT])
-         pathCheck.dThetaDeg[RIGHT] += fabs(isol2.jointAngles[RIGHT].theta1Deg - isol2.jointAngles[RIGHT].theta1Deg) + fabs(isol2.jointAngles[RIGHT].theta2Deg - isol1.jointAngles[RIGHT].theta2Deg);
-   }
-
-   return pathCheck;
-
-}
-
 #ifdef _WIN32
 void drawLine()
 {
@@ -570,6 +555,6 @@ void waitForEnterKey()
 // RETURN VALUE: nearest int
 int nint(double d)
 {
-   return (int)floor(d + 0.5);
+    return (int)floor(d + 0.5);
 }
 
