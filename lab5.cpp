@@ -142,7 +142,7 @@ void drawLine();
 
 INVERSE_SOLUTION inverseKinematics(TOOL_POSITION); // get left/right arm joint angles from x,y pos
 TOOL_POSITION* getLinePoints(double, double, double, double, char, int*);
-PATH_CHECK checkPath(TOOL_POSITION*, int);
+PATH_CHECK checkPath(TOOL_POSITION*, const int);
 
 #ifdef __APPLE__
 void macDrawLine();
@@ -278,9 +278,7 @@ TOOL_POSITION* getLinePoints(double x1, double y1, double x2, double y2, char re
         NP = nint(((lineLength) / 500) * HIGH_RESOLUTION_POINTS_PER_500_UNITS);
     }
 
-    printf("The number of of points is %d\n", NP);
-
-    TOOL_POSITION* toolPoints = (TOOL_POSITION*)malloc(NP * sizeof(TOOL_POSITION));
+    TOOL_POSITION* toolPoints = (TOOL_POSITION*)calloc(NP, sizeof(TOOL_POSITION));
 
     if (toolPoints != NULL)
     {
@@ -295,178 +293,130 @@ TOOL_POSITION* getLinePoints(double x1, double y1, double x2, double y2, char re
         return NULL;
     }
 
-
-    printf("The list of points are:\n");
-    for (int i = 0; i < NP; ++i)
-    {
-        printf("(%lf, %lf) \n", toolPoints[i].x, toolPoints[i].y);
-    }
-
     *numPoints = NP;
 
     return toolPoints;
 }
+
+PATH_CHECK checkPath(TOOL_POSITION* toolPos, const int NP)
+{
+    PATH_CHECK pathCheck = { true, true, 0.0, 0.0};
+
+    for (int i = 0; i < NP - 1; ++i)
+    {
+        INVERSE_SOLUTION isol0 = inverseKinematics(toolPos[i]);
+        INVERSE_SOLUTION isol1 = inverseKinematics(toolPos[i + 1]);
+        if (isol0.bCanReach[LEFT] && pathCheck.bCanDraw[LEFT])
+        {
+            pathCheck.dThetaDeg[LEFT] += ((isol1.jointAngles[LEFT].theta1Deg - isol0.jointAngles[LEFT].theta1Deg) + (isol1.jointAngles[LEFT].theta2Deg - isol0.jointAngles[LEFT].theta2Deg));
+        }
+        else
+        {
+            pathCheck.bCanDraw[LEFT] = false;
+        }
+
+        if (isol0.bCanReach[RIGHT] && pathCheck.bCanDraw[RIGHT])
+        {
+            pathCheck.dThetaDeg[RIGHT] += ((isol1.jointAngles[RIGHT].theta1Deg - isol0.jointAngles[RIGHT].theta1Deg) + (isol1.jointAngles[RIGHT].theta2Deg - isol0.jointAngles[RIGHT].theta1Deg));
+        }
+        else
+        {
+            pathCheck.bCanDraw[RIGHT] = false;
+        }
+    }
+    return pathCheck;
+}
+
 #ifdef _WIN32
 void drawLine()
 {
-   double x1, y1, x2, y2;
-   char resolution;
-   int numPoints;
-   TOOL_POSITION *points;
-   PATH_CHECK pathCheck;
-   char commandString[COMMAND_STRING_ARRAY_SIZE];
+    double x1, y1, x2, y2;
+    char resolution;
+    int numPoints;
+    TOOL_POSITION* points;
+    PATH_CHECK pathCheck;
+    char commandString[COMMAND_STRING_ARRAY_SIZE];
+    RGB color;
+    int speed;
 
-   printf("Enter line start point (x y): ");
-   scanf_s("%lf %lf", &x1, &y1);
-   flushInputBuffer();
-   printf("Enter line end point (x y): ");
-   scanf_s("%lf %lf", &x2, &y2);
-   flushInputBuffer();
 
-   printf("Please enter line resolution (l = low, m = medium, h = high): ");
-   scanf_s("%c", &resolution, sizeof(&resolution));
-   flushInputBuffer();
-   INVERSE_SOLUTION testInv[200];
+    printf("Please enter start points (x1 y1): ");
+    scanf_s("%lf %lf", &x1, &y1);
+    printf("Please enter end points (x2 y2): ");
+    scanf_s("%lf %lf", &x2, &y2);
 
-   points = getLinePoints(x1, y1, x2, y2, resolution, &numPoints);
+    printf("Enter enter line resolution (l = low, m = medium, h = high): ");
+    scanf_s(" %c", &resolution, 1);
 
-   for(int i = 0; i < numPoints; i++)
-   {
-   testInv[i] = inverseKinematics(points[i]);
-   }
+    points = getLinePoints(x1, y1, x2, y2, resolution, &numPoints);
 
-  
 
-   if (points != NULL)
-   {
-      //pathCheck = checkPath(points, numPoints);
+    if (points != NULL)
+    {
+        pathCheck = checkPath(points, numPoints);
 
-      pathCheck = {false, true, 900, 300};
+        if (pathCheck.bCanDraw[RIGHT] || pathCheck.bCanDraw[LEFT])
+        {
+            printf("Enter pen color (r g b): ");
+            scanf_s("%d %d %d", &color.r, &color.g, &color.b);
 
-      if (pathCheck.bCanDraw[LEFT] || pathCheck.bCanDraw[RIGHT])
-      {
-         RGB color = { 255, 255 ,255 };
-         int motorSpeed = 1;
+            sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "PEN_COLOR %d %d %d\n", color.r, color.g, color.b);
+            robot.Send(commandString);
 
-         printf("Enter pen color (r g b): ");
-         scanf_s("%d %d %d", &color.r, &color.g, &color.b);
+            printf("Enter motorspeed (0 = low, 1 = medium, 2 = high) ");
+            scanf_s("%d", &speed);
 
-         sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "PEN_COLOR %d %d %d\n", color.r, color.g, color.b);
-         robot.Send(commandString);
-         
+            sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "MOTOR_SPEED %s\n", speed == 0 ? "LOW" : speed == 1 ? "MEDIUM" : "HIGH");
+            robot.Send(commandString);
 
-         printf("Enter motor speed (0 = low, 1 = medium, 2 = high): ");
-         scanf_s("%d", &motorSpeed);
-
-         sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "MOTOR_SPEED %s\n", motorSpeed == 0 ? "LOW" : motorSpeed == 1 ? "MEDIUM" : "HIGH");
-
-         robot.Send("PEN_UP\n");
-         if(pathCheck.bCanDraw[LEFT] && pathCheck.bCanDraw[RIGHT])
-         {
-            if(pathCheck.dThetaDeg[LEFT] < pathCheck.dThetaDeg[RIGHT])
+            if (pathCheck.bCanDraw[LEFT] && pathCheck.bCanDraw[RIGHT])
             {
-               for(int i = 0; i < numPoints; i++)
-               {
-               
-                  INVERSE_SOLUTION isol = inverseKinematics(points[i]);
+                if (pathCheck.dThetaDeg[LEFT] >= pathCheck.dThetaDeg[RIGHT])
+                {
+                    for (int i = 0; i < numPoints; ++i)
+                    {
+                        INVERSE_SOLUTION isol = inverseKinematics(points[i]);
+                        sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
+                        robot.Send(commandString);
 
-                  sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
-                  robot.Send(commandString);
-               
-                  robot.Send("PEN_DOWN\n");
-            
-               }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < numPoints; ++i)
+                    {
+                        INVERSE_SOLUTION isol = inverseKinematics(points[i]);
+                        sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
+                        robot.Send(commandString);
+                    }
+                }
             }
-            else
+            else if (pathCheck.bCanDraw[LEFT])
             {
-               for(int i = 0; i < numPoints; i++)
-               {
-                  INVERSE_SOLUTION isol = inverseKinematics(points[i]);
-
-                  sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
-                  robot.Send(commandString);
-
-                  robot.Send("PEN_DOWN\n");
-                 
-               }
+                for (int i = 0; i < numPoints; ++i)
+                {
+                    INVERSE_SOLUTION isol = inverseKinematics(points[i]);
+                    sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
+                    robot.Send(commandString);
+                }
             }
-         }
- 
-         else if (pathCheck.bCanDraw[RIGHT])
-         {
-            for(int i = 0; i < numPoints; i++)
+
+            else if (pathCheck.bCanDraw[RIGHT])
             {
-               INVERSE_SOLUTION isol = inverseKinematics(points[i]);
-
-               sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
-               robot.Send(commandString);
-               if(i == 0)
-               {
-                  robot.Send("PEN_DOWN\n");
-               }
-
+                for (int i = 0; i < numPoints; ++i)
+                {
+                    INVERSE_SOLUTION isol = inverseKinematics(points[i]);
+                    sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
+                    robot.Send(commandString);
+                }
             }
-         }
-         else if(pathCheck.bCanDraw[LEFT])
-         {
-            for(int i = 0; i < numPoints; i++)
-            {
-               INVERSE_SOLUTION isol = inverseKinematics(points[i]);
-
-               sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
-               robot.Send(commandString);
-               if(i == 0)
-               {
-                  robot.Send("PEN_DOWN");
-               }
-            }
-         }
-      }
-      else
-      {
-         printf("Neither arm can draw the line.\n");
-      }
-      free(points);
-   }
+        }
+    }
 }
 #endif
 
-
 void macDrawLine()
 {
-   TOOL_POSITION toolPos = {-230.303030, 300};
-   INVERSE_SOLUTION isol = inverseKinematics(toolPos);
-   double x1 = -400, y1 = 300, x2 = 400, y2 = 300;
-   char resolution = 'l';
-   int numPoints;
-   TOOL_POSITION* points;
-   PATH_CHECK pathCheck;
-
-   printf("left theta 1 is: %lf\n", isol.jointAngles[LEFT].theta1Deg);
-   printf("left theta 2 is: %lf\n", isol.jointAngles[LEFT].theta2Deg);
-   printf("right theta 1 is: %lf\n", isol.jointAngles[RIGHT].theta1Deg);
-   printf("right theta 2 is: %lf\n", isol.jointAngles[RIGHT].theta2Deg);
-   printf("Left can reach is %d\n", isol.bCanReach[LEFT]);
-   printf("Right can reach is %d\n", isol.bCanReach[RIGHT]);
-
-   points = getLinePoints(x1, y1, x2, y2, resolution, &numPoints);
-   
-   printf("The number of points at high resolution is %d\n", numPoints);
-
-   for(size_t i = 0; i < numPoints; i++)
-   {
-      printf("(%lf, %lf)\n", points[i].x, points[i].y);
-   }
-
-   pathCheck = checkPath(points, numPoints);
-
-   if (pathCheck.bCanDraw[RIGHT] && (!pathCheck.bCanDraw[LEFT] || pathCheck.dThetaDeg[RIGHT] < pathCheck.dThetaDeg[LEFT]))
-   {
-      for(size_t i = 0; i < numPoints; i++)
-      {
-         printf("(%lf, %lf)\n", points[i].x, points[i].y);
-      }
-   }
    TOOL_POSITION tp = { -400, 300 };
    int numPoints = 0;
 
@@ -488,25 +438,7 @@ void macDrawLine()
        printf("Right Arm:\n");
        printf("right joint angles: (%lf, %lf)\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
        printf("right arm reachable: %d\n", isol.bCanReach[RIGHT]);
-
-
-
    }
-
-
-   /*
-   INVERSE_SOLUTION isol = inverseKinematics(tp);
-
-   printf("the value of x: %lf\n the value of y: %lf\n", tp.x, tp.y);
-   printf("the left joint angles: (%lf, %lf)\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
-   printf("The right joint angles: (%lf, %lf)\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
-   printf("this is left %d\n", isol.bCanReach[LEFT]);
-   printf("This is right %d", isol.bCanReach[RIGHT]);
-   */
-
-
-
-
 
 }
 
