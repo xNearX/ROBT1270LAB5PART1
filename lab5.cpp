@@ -155,11 +155,17 @@ void macDrawLine();
 // RETURN VALUE: an int that tells the O/S how the program ended.  0 = EXIT_SUCCESS = normal termination
 int main()
 {
+    char exit = 'y';
    // windows only
    #ifdef _WIN32
    // open connection with robot
    if(!robot.Initialize()) return 0;
+   while (exit == 'y')
+   {
    drawLine();
+   //printf("Continue? (y/n): ");
+   //scanf_s("%c", &exit, 1);
+   }
    pauseRobotThenClear();
    robot.Send("END\n"); // close remote connection
    robot.Close(); // close the robot
@@ -342,11 +348,14 @@ void drawLine()
 
     printf("Please enter start points (x1 y1): ");
     scanf_s("%lf %lf", &x1, &y1);
+    flushInputBuffer();
     printf("Please enter end points (x2 y2): ");
     scanf_s("%lf %lf", &x2, &y2);
+    flushInputBuffer();
 
     printf("Enter enter line resolution (l = low, m = medium, h = high): ");
     scanf_s(" %c", &resolution, 1);
+    flushInputBuffer();
 
     points = getLinePoints(x1, y1, x2, y2, resolution, &numPoints);
 
@@ -369,6 +378,7 @@ void drawLine()
             sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "MOTOR_SPEED %s\n", speed == 0 ? "LOW" : speed == 1 ? "MEDIUM" : "HIGH");
             robot.Send(commandString);
 
+            robot.Send("PEN_UP\n");
             if (pathCheck.bCanDraw[LEFT] && pathCheck.bCanDraw[RIGHT])
             {
                 if (pathCheck.dThetaDeg[LEFT] >= pathCheck.dThetaDeg[RIGHT])
@@ -378,6 +388,10 @@ void drawLine()
                         INVERSE_SOLUTION isol = inverseKinematics(points[i]);
                         sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
                         robot.Send(commandString);
+                        if (i == 0)
+                        {
+                            robot.Send("PEN_DOWN\n");
+                        }
 
                     }
                 }
@@ -388,6 +402,10 @@ void drawLine()
                         INVERSE_SOLUTION isol = inverseKinematics(points[i]);
                         sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
                         robot.Send(commandString);
+                        if (i == 0)
+                        {
+                            robot.Send("PEN_DOWN\n");
+                        }
                     }
                 }
             }
@@ -398,6 +416,10 @@ void drawLine()
                     INVERSE_SOLUTION isol = inverseKinematics(points[i]);
                     sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
                     robot.Send(commandString);
+					if (i == 0)
+					{
+						robot.Send("PEN_DOWN\n");
+					}
                 }
             }
 
@@ -406,10 +428,18 @@ void drawLine()
                 for (int i = 0; i < numPoints; ++i)
                 {
                     INVERSE_SOLUTION isol = inverseKinematics(points[i]);
-                    sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[LEFT].theta1Deg, isol.jointAngles[LEFT].theta2Deg);
+                    sprintf_s(commandString, COMMAND_STRING_ARRAY_SIZE, "ROTATE_JOINT ANG1 %.2f ANG2 %.2f\n", isol.jointAngles[RIGHT].theta1Deg, isol.jointAngles[RIGHT].theta2Deg);
                     robot.Send(commandString);
+					if (i == 0)
+					{
+						robot.Send("PEN_DOWN\n");
+					}
                 }
             }
+        }
+        else
+        {
+            printf("Robot arm cannot make line\n");
         }
     }
 }
